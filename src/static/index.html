@@ -8,8 +8,32 @@
   </head>
   <body>
     <header>
-      <h1>Mergington High School</h1>
-      <h2>Extracurricular Activities</h2>
+      <div>
+        <h1>Mergington High School</h1>
+        <h2>Extracurricular Activities</h2>
+      </div>
+
+      <section class="auth-panel" aria-label="Staff access">
+        <h3>Staff Access</h3>
+        <p id="auth-status">Not signed in. Students can browse, but only staff can manage registrations.</p>
+
+        <form id="login-form" class="auth-form">
+          <div class="form-group compact">
+            <label for="username">Username</label>
+            <input type="text" id="username" required placeholder="clubadmin" />
+          </div>
+          <div class="form-group compact">
+            <label for="password">Password</label>
+            <input type="password" id="password" required placeholder="clubadminpass" />
+          </div>
+          <button type="submit">Log In</button>
+        </form>
+
+        <div id="session-actions" class="hidden">
+          <p id="current-user"></p>
+          <button type="button" id="logout-button">Log Out</button>
+        </div>
+      </section>
     </header>
 
     <main>
@@ -22,8 +46,11 @@
       </section>
 
       <section id="signup-container">
-        <h3>Sign Up for an Activity</h3>
-        <form id="signup-form">
+        <h3>Manage Registrations</h3>
+        <p id="signup-locked-message" class="message info">
+          Sign in with a staff account to register or unregister students.
+        </p>
+        <form id="signup-form" class="hidden">
           <div class="form-group">
             <label for="email">Student Email:</label>
             <input type="email" id="email" required placeholder="your-email@mergington.edu" />
@@ -35,9 +62,9 @@
               <!-- Activity options will be loaded here -->
             </select>
           </div>
-          <button type="submit">Sign Up</button>
+          <button type="submit">Register Student</button>
         </form>
-        <div id="message" class="hidden"></div>
+        <div id="message" class="message hidden"></div>
       </section>
     </main>
 

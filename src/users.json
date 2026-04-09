@@ -1,0 +1,26 @@
+[
+  {
+    "username": "student1",
+    "password": "studentpass",
+    "name": "Avery Student",
+    "role": "student"
+  },
+  {
+    "username": "clubadmin",
+    "password": "clubadminpass",
+    "name": "Casey Club Admin",
+    "role": "club_admin"
+  },
+  {
+    "username": "supervisor",
+    "password": "supervisorpass",
+    "name": "Sam Supervisor",
+    "role": "supervisor"
+  },
+  {
+    "username": "principal",
+    "password": "principalpass",
+    "name": "Pat Principal",
+    "role": "institution_admin"
+  }
+]

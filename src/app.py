@@ -1,3 +1,14 @@
+import os
+import json
+import secrets
+from pathlib import Path
+
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.responses import RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+
 """
 High School Management System API
 
@@ -5,19 +16,35 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
-from fastapi import FastAPI, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
-import os
-from pathlib import Path
-
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
 
 # Mount the static files directory
 current_dir = Path(__file__).parent
+users_file = current_dir / "users.json"
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
+
+security = HTTPBearer(auto_error=False)
+session_store = {}
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+def load_users():
+    with users_file.open("r", encoding="utf-8") as file_handle:
+        user_records = json.load(file_handle)
+
+    return {
+        record["username"]: record
+        for record in user_records
+    }
+
+
+users = load_users()
 
 # In-memory activity database
 activities = {
@@ -78,9 +105,97 @@ activities = {
 }
 
 
+def get_current_user_optional(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if credentials is None:
+        return None
+
+    session = session_store.get(credentials.credentials)
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired authentication token"
+        )
+
+    return session
+
+
+def require_roles(*allowed_roles):
+    def dependency(current_user=Depends(get_current_user_optional)):
+        if current_user is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required"
+            )
+
+        if current_user["role"] not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your role is not allowed to perform this action"
+            )
+
+        return current_user
+
+    return dependency
+
+
+def require_authenticated_user(current_user=Depends(get_current_user_optional)):
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required"
+        )
+
+    return current_user
+
+
 @app.get("/")
 def root():
     return RedirectResponse(url="/static/index.html")
+
+
+@app.post("/auth/login")
+def login(payload: LoginRequest):
+    user = users.get(payload.username)
+
+    if user is None or user["password"] != payload.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid username or password"
+        )
+
+    token = secrets.token_urlsafe(32)
+    session_store[token] = {
+        "username": user["username"],
+        "name": user["name"],
+        "role": user["role"]
+    }
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": session_store[token]
+    }
+
+
+@app.post("/auth/logout")
+def logout(current_user=Depends(require_authenticated_user),
+           credentials: HTTPAuthorizationCredentials = Depends(security)):
+    if credentials is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required"
+        )
+
+    session_store.pop(credentials.credentials, None)
+    return {"message": f"Signed out {current_user['username']}"}
+
+
+@app.get("/auth/session")
+def get_session(current_user=Depends(get_current_user_optional)):
+    return {
+        "authenticated": current_user is not None,
+        "user": current_user
+    }
 
 
 @app.get("/activities")
@@ -89,7 +204,12 @@ def get_activities():
 
 
 @app.post("/activities/{activity_name}/signup")
-def signup_for_activity(activity_name: str, email: str):
+def signup_for_activity(activity_name: str, email: str,
+                        current_user=Depends(require_roles(
+                            "club_admin",
+                            "supervisor",
+                            "institution_admin"
+                        ))):
     """Sign up a student for an activity"""
     # Validate activity exists
     if activity_name not in activities:
@@ -107,11 +227,19 @@ def signup_for_activity(activity_name: str, email: str):
 
     # Add student
     activity["participants"].append(email)
-    return {"message": f"Signed up {email} for {activity_name}"}
+    return {
+        "message": f"Signed up {email} for {activity_name}",
+        "managed_by": current_user["username"]
+    }
 
 
 @app.delete("/activities/{activity_name}/unregister")
-def unregister_from_activity(activity_name: str, email: str):
+def unregister_from_activity(activity_name: str, email: str,
+                             current_user=Depends(require_roles(
+                                 "club_admin",
+                                 "supervisor",
+                                 "institution_admin"
+                             ))):
     """Unregister a student from an activity"""
     # Validate activity exists
     if activity_name not in activities:
@@ -129,4 +257,7 @@ def unregister_from_activity(activity_name: str, email: str):
 
     # Remove student
     activity["participants"].remove(email)
-    return {"message": f"Unregistered {email} from {activity_name}"}
+    return {
+        "message": f"Unregistered {email} from {activity_name}",
+        "managed_by": current_user["username"]
+    }
